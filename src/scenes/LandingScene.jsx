@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useEffect } from 'react';
+import { about } from '../data/about';
 
 export default function LandingScene({ onComplete }) {
   useEffect(() => {
@@ -40,7 +41,7 @@ export default function LandingScene({ onComplete }) {
           transition={{ delay: 0.45, duration: 0.8 }}
           className="mt-4 max-w-4xl font-display text-4xl uppercase tracking-[0.12em] text-white sm:text-6xl"
         >
-          Space Exploration Portfolio
+          Nakul Pandit
         </motion.h1>
         <motion.p
           initial={{ opacity: 0, y: 18 }}
@@ -48,7 +49,15 @@ export default function LandingScene({ onComplete }) {
           transition={{ delay: 0.7, duration: 0.8 }}
           className="mt-5 max-w-xl text-sm leading-7 text-white/70 sm:text-base"
         >
-          Navigate galaxies, inspect projects as star systems, and dive into research constellations built for curious recruiters.
+          {about.shortBio}
+        </motion.p>
+        <motion.p
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.9, duration: 0.8 }}
+          className="mt-3 max-w-2xl text-xs uppercase tracking-[0.35em] text-white/45 sm:text-sm"
+        >
+          AI, machine learning, scientific curiosity, and cinematic interface design.
         </motion.p>
 
         <motion.div
@@ -73,7 +82,7 @@ export default function LandingScene({ onComplete }) {
           onClick={onComplete}
           className="mt-20 rounded-full border border-white/15 bg-white/10 px-6 py-3 font-display text-sm uppercase tracking-[0.32em] text-white transition hover:bg-white/15"
         >
-          Enter Universe
+          Begin Exploration
         </button>
       </div>
     </motion.section>

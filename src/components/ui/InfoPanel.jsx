@@ -1,6 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMemo, useState } from 'react';
+import { about } from '../../data/about';
+import { contact } from '../../data/contact';
 import { galaxies } from '../../data/galaxies';
+import { skillGroups } from '../../data/skills';
 import { useStore } from '../../store/useStore';
 
 function Pill({ children }) {
@@ -8,6 +11,27 @@ function Pill({ children }) {
     <span className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
       {children}
     </span>
+  );
+}
+
+function ActionLink({ href, children, tone = 'primary', download = false }) {
+  const styles =
+    tone === 'secondary'
+      ? 'bg-white text-slate-950'
+      : tone === 'warm'
+        ? 'bg-plasma text-slate-950'
+        : 'bg-nebula text-slate-950';
+
+  return (
+    <a
+      href={href}
+      target={download ? undefined : '_blank'}
+      rel={download ? undefined : 'noreferrer'}
+      download={download}
+      className={`inline-flex rounded-full px-4 py-2 font-medium transition hover:translate-y-[-1px] ${styles}`}
+    >
+      {children}
+    </a>
   );
 }
 
@@ -19,17 +43,18 @@ export default function InfoPanel() {
   const setInfoPanelOpen = useStore((state) => state.setInfoPanelOpen);
   const [transmitted, setTransmitted] = useState(false);
 
-  const galaxy = useMemo(
-    () => galaxies.find((entry) => entry.id === currentGalaxy) ?? null,
-    [currentGalaxy],
-  );
-
+  const galaxy = useMemo(() => galaxies.find((entry) => entry.id === currentGalaxy) ?? null, [currentGalaxy]);
   const isOpen = (infoPanelOpen || Boolean(selectedItem)) && selectedItem?.kind !== 'about';
 
   const closePanel = () => {
     resetSelection();
     setInfoPanelOpen(false);
   };
+
+  const skillGroup =
+    selectedItem?.kind === 'skill'
+      ? skillGroups.find((entry) => entry.id === selectedItem.category)
+      : null;
 
   return (
     <AnimatePresence>
@@ -40,7 +65,7 @@ export default function InfoPanel() {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 36 }}
           transition={{ duration: 0.35 }}
-          className="pointer-events-auto absolute bottom-4 right-4 z-30 w-[min(420px,calc(100%-2rem))] rounded-[28px] glass-panel panel-grid p-5 shadow-glow"
+          className="pointer-events-auto absolute bottom-4 right-4 z-30 w-[min(430px,calc(100%-2rem))] rounded-[28px] glass-panel panel-grid p-5 shadow-glow"
           data-ui="true"
         >
           <div className="mb-4 flex items-start justify-between gap-4">
@@ -63,106 +88,164 @@ export default function InfoPanel() {
 
           {selectedItem?.kind === 'project' ? (
             <div className="space-y-4 text-sm text-white/72">
-              <p>{selectedItem.description}</p>
               <div className="flex flex-wrap gap-2">
-                {selectedItem.tech.map((tech) => (
+                <Pill>{selectedItem.category}</Pill>
+                <Pill>{selectedItem.status}</Pill>
+                <Pill>{selectedItem.year}</Pill>
+              </div>
+              <p>{selectedItem.shortDescription}</p>
+              <p>{selectedItem.detailedDescription}</p>
+              <div className="flex flex-wrap gap-2">
+                {selectedItem.techStack.map((tech) => (
                   <Pill key={tech}>{tech}</Pill>
                 ))}
               </div>
-              <div className="grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/45">Role</p>
-                  <p className="mt-1 text-white">{selectedItem.role}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/45">Impact</p>
-                  <p className="mt-1 text-white">{selectedItem.metrics}</p>
-                </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/45">Why It Matters</p>
+                <p className="mt-2">{selectedItem.highlight}</p>
               </div>
-              <a
-                href={selectedItem.link}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex rounded-full bg-nebula px-4 py-2 font-medium text-slate-950 transition hover:translate-y-[-1px]"
-              >
-                Open Project Orbit
-              </a>
+              <div className="flex flex-wrap gap-3">
+                {selectedItem.github ? <ActionLink href={selectedItem.github}>Open GitHub</ActionLink> : null}
+                {selectedItem.secondaryLink ? (
+                  <ActionLink href={selectedItem.secondaryLink} tone="secondary">
+                    Reference Repo
+                  </ActionLink>
+                ) : null}
+                {!selectedItem.github && selectedItem.fallbackLabel ? <Pill>{selectedItem.fallbackLabel}</Pill> : null}
+              </div>
             </div>
           ) : null}
 
           {selectedItem?.kind === 'research' ? (
             <div className="space-y-4 text-sm text-white/72">
-              <div className="flex items-center gap-3">
-                <Pill>{selectedItem.year}</Pill>
-                <Pill>{selectedItem.domain}</Pill>
-              </div>
-              <p>{selectedItem.summary}</p>
               <div className="flex flex-wrap gap-2">
-                {selectedItem.concepts.map((concept) => (
+                <Pill>Paper study</Pill>
+                <Pill>{selectedItem.year}</Pill>
+                <Pill>{selectedItem.domainLabel ?? selectedItem.domain}</Pill>
+              </div>
+              <p className="text-white/55">{selectedItem.authors}</p>
+              <p>{selectedItem.simpleSummary}</p>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/45">Deeper Takeaway</p>
+                <p className="mt-2">{selectedItem.deepSummary}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedItem.keyConcepts.map((concept) => (
                   <Pill key={concept}>{concept}</Pill>
                 ))}
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-white/45">Research Notes</p>
-                <p className="mt-2">{selectedItem.notes}</p>
-              </div>
-              <a
-                href={selectedItem.link}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex rounded-full bg-white px-4 py-2 font-medium text-slate-950 transition hover:translate-y-[-1px]"
-              >
-                Read Paper Link
-              </a>
+              <ActionLink href={selectedItem.link} tone="secondary">
+                Read Source Paper
+              </ActionLink>
             </div>
           ) : null}
 
           {selectedItem?.kind === 'skill' ? (
-            <div className="space-y-3 text-sm text-white/72">
+            <div className="space-y-4 text-sm text-white/72">
+              <div className="flex flex-wrap gap-2">
+                <Pill>{skillGroup?.label ?? 'Skill'}</Pill>
+                <Pill>{selectedItem.levelLabel}</Pill>
+              </div>
               <p>{selectedItem.summary}</p>
               <p>
-                Fast-moving product work, motion-heavy interfaces, and reusable systems design are where this skill shows up most often.
+                The portfolio uses orbit size and speed as a visual shorthand for confidence and recent relevance rather than pretending to be a formal skills matrix.
               </p>
+            </div>
+          ) : null}
+
+          {selectedItem?.kind === 'education' ? (
+            <div className="space-y-4 text-sm text-white/72">
+              <div className="flex flex-wrap gap-2">
+                <Pill>{selectedItem.institution}</Pill>
+                <Pill>{selectedItem.period}</Pill>
+              </div>
+              <p>{selectedItem.description}</p>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/45">Context</p>
+                <p className="mt-2">{selectedItem.details}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedItem.focus.map((item) => (
+                  <Pill key={item}>{item}</Pill>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {selectedItem?.kind === 'resume' ? (
+            <div className="space-y-4 text-sm text-white/72">
+              <p>
+                A concise recruiter-facing snapshot of Nakul’s profile: engineering foundations, current MSc focus, public project links, and AI/ML plus scientific-computing direction.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Pill>MSc AI/ML in Science</Pill>
+                <Pill>Creative Frontend</Pill>
+                <Pill>Research-minded engineering</Pill>
+              </div>
+              <ActionLink href="/resume/nakul-pandit-resume.pdf" download>
+                Download Resume PDF
+              </ActionLink>
+            </div>
+          ) : null}
+
+          {selectedItem?.kind === 'contact' ? (
+            <div className="space-y-4 text-sm text-white/72">
+              <p>{selectedItem.value}</p>
+              <p>{contact.availability}</p>
+              <ActionLink href={selectedItem.href} tone="warm">
+                Open {selectedItem.label}
+              </ActionLink>
             </div>
           ) : null}
 
           {!selectedItem && currentGalaxy === 'resume' ? (
             <div className="space-y-4 text-sm text-white/72">
               <p>
-                The station holds a compact recruiter-friendly snapshot focused on product engineering, immersive frontend work, and research-driven interfaces.
+                This station is designed for quick recruiter scanning: a direct resume download, a concise technical identity, and clean paths into projects and research.
               </p>
-              <div className="grid gap-2">
-                <Pill>Frontend Architecture</Pill>
-                <Pill>Creative Development</Pill>
-                <Pill>Interactive 3D Experiences</Pill>
+              <div className="flex flex-wrap gap-2">
+                <Pill>AI / ML Direction</Pill>
+                <Pill>Scientific Computing</Pill>
+                <Pill>Interactive Frontend</Pill>
               </div>
-              <a
-                href="/resume.txt"
-                download
-                className="inline-flex rounded-full bg-aurora px-4 py-2 font-medium text-slate-950 transition hover:translate-y-[-1px]"
-              >
-                Download Resume Snapshot
-              </a>
+              <ActionLink href="/resume/nakul-pandit-resume.pdf" download>
+                Download Resume PDF
+              </ActionLink>
             </div>
           ) : null}
 
           {!selectedItem && currentGalaxy === 'contact' ? (
             <form
-              className="space-y-3 text-sm text-white/72"
+              className="space-y-4 text-sm text-white/72"
               onSubmit={(event) => {
                 event.preventDefault();
                 setTransmitted(true);
               }}
             >
-              <p>Transmit a signal for collaborations, frontend roles, or research conversations.</p>
+              <p>{contact.availability}</p>
+              <div className="flex flex-wrap gap-2">
+                {contact.channels.map((channel) => (
+                  <Pill key={channel.id}>{channel.label}</Pill>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <ActionLink href={about.links.github}>Open GitHub</ActionLink>
+                <ActionLink href={about.links.linkedin} tone="secondary">
+                  Open LinkedIn
+                </ActionLink>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/45">Signal Console</p>
+                <p className="mt-2">{contact.note}</p>
+              </div>
               <input
                 type="text"
                 placeholder="Your name"
                 className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-white/35"
               />
               <input
-                type="email"
-                placeholder="Email frequency"
+                type="text"
+                placeholder="Topic"
                 className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-white/35"
               />
               <textarea
@@ -176,14 +259,15 @@ export default function InfoPanel() {
               >
                 Transmit Signal
               </button>
-              {transmitted ? <p className="text-aurora">Signal sent. A reply beacon would normally continue from here.</p> : null}
+              {transmitted ? <p className="text-aurora">Signal drafted. Public links above are the reliable contact routes included here.</p> : null}
             </form>
           ) : null}
-          {!selectedItem && currentGalaxy !== 'resume' && currentGalaxy !== 'contact' && galaxy ? (
+
+          {!selectedItem && galaxy && currentGalaxy !== 'resume' && currentGalaxy !== 'contact' ? (
             <div className="space-y-3 text-sm text-white/72">
               <p>{galaxy.description}</p>
               <p>
-                Move deeper into the cluster to inspect individual systems. The strongest implementations in this build are the Projects and Research galaxies.
+                Hover reveals lightweight cues; clicking deeper opens the richer panel state. The strongest recruiter-facing sections are Projects, Research, and Resume.
               </p>
             </div>
           ) : null}

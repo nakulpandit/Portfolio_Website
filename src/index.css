@@ -6,8 +6,9 @@
   color-scheme: dark;
   font-family: 'Inter', sans-serif;
   background:
-    radial-gradient(circle at top, rgba(30, 48, 80, 0.45), transparent 35%),
-    radial-gradient(circle at bottom, rgba(78, 33, 58, 0.35), transparent 30%),
+    radial-gradient(circle at top, rgba(54, 82, 135, 0.34), transparent 30%),
+    radial-gradient(circle at bottom, rgba(97, 44, 70, 0.28), transparent 26%),
+    radial-gradient(circle at 20% 50%, rgba(114, 247, 255, 0.12), transparent 24%),
     #040612;
 }
 
@@ -26,6 +27,9 @@ body,
 body {
   overflow: hidden;
   cursor: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  letter-spacing: 0.01em;
 }
 
 canvas {
@@ -35,14 +39,15 @@ canvas {
 .glass-panel {
   background: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.14),
-    rgba(255, 255, 255, 0.05)
+    rgba(255, 255, 255, 0.16),
+    rgba(255, 255, 255, 0.045)
   );
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.13);
   box-shadow:
-    0 10px 30px rgba(3, 6, 18, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(18px);
+    0 18px 50px rgba(3, 6, 18, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -18px 32px rgba(4, 6, 18, 0.18);
+  backdrop-filter: blur(22px);
 }
 
 .panel-grid {
@@ -53,5 +58,10 @@ canvas {
 }
 
 .text-glow {
-  text-shadow: 0 0 18px rgba(114, 247, 255, 0.35);
+  text-shadow: 0 0 18px rgba(114, 247, 255, 0.26);
+}
+
+::selection {
+  background: rgba(114, 247, 255, 0.28);
+  color: #f6f7fb;
 }

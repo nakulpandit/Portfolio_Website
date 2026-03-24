@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-const INITIAL_CAMERA = { position: [0, 0, 14], lookAt: [0, 0, 0], zoom: 1 };
+const INITIAL_CAMERA = { position: [0, 0, 22], lookAt: [0, 0, 0], zoom: 1 };
 
 export const useStore = create((set) => ({
   phase: 'landing',
@@ -13,7 +13,6 @@ export const useStore = create((set) => ({
     infoPanelOpen: false,
     modalOpen: false,
     loaderVisible: true,
-    navOpen: false,
     warpActive: false,
   },
   setPhase: (phase) => set({ phase }),
@@ -31,8 +30,6 @@ export const useStore = create((set) => ({
     set((state) => ({ ui: { ...state.ui, modalOpen: isOpen } })),
   setLoaderVisible: (isVisible) =>
     set((state) => ({ ui: { ...state.ui, loaderVisible: isVisible } })),
-  setNavOpen: (isOpen) =>
-    set((state) => ({ ui: { ...state.ui, navOpen: isOpen } })),
   setWarpActive: (isActive) =>
     set((state) => ({ ui: { ...state.ui, warpActive: isActive } })),
   focusGalaxy: (galaxy) =>
@@ -41,7 +38,11 @@ export const useStore = create((set) => ({
       selectedItem: null,
       ui: { ...state.ui, infoPanelOpen: true, modalOpen: false, warpActive: true },
       cameraTarget: {
-        position: [galaxy.position[0], galaxy.position[1], 6],
+        position: [
+          galaxy.position[0] + 0.4,
+          galaxy.position[1] + 0.25,
+          galaxy.position[2] + (galaxy.focusDistance ?? 5),
+        ],
         lookAt: galaxy.position,
         zoom: 1,
       },
@@ -56,5 +57,18 @@ export const useStore = create((set) => ({
     set((state) => ({
       selectedItem: null,
       ui: { ...state.ui, modalOpen: false },
+    })),
+  returnToUniverse: () =>
+    set((state) => ({
+      currentGalaxy: null,
+      selectedItem: null,
+      hoveredItem: null,
+      cameraTarget: INITIAL_CAMERA,
+      ui: {
+        ...state.ui,
+        infoPanelOpen: false,
+        modalOpen: false,
+        warpActive: true,
+      },
     })),
 }));
