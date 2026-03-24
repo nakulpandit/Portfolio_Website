@@ -1,6 +1,5 @@
 import { Canvas } from '@react-three/fiber';
 import { useRef } from 'react';
-import * as THREE from 'three';
 import Universe from '../components/space/Universe';
 import HUD from '../components/ui/HUD';
 import InfoPanel from '../components/ui/InfoPanel';
@@ -8,95 +7,172 @@ import Modal from '../components/ui/Modal';
 import GalaxyScene from './GalaxyScene';
 import { useStore } from '../store/useStore';
 
+const distanceBetweenTouches = (touches) => {
+  const [firstTouch, secondTouch] = touches;
+  return Math.hypot(secondTouch.clientX - firstTouch.clientX, secondTouch.clientY - firstTouch.clientY);
+};
+
+const midpointBetweenTouches = (touches) => ({
+  x: (touches[0].clientX + touches[1].clientX) / 2,
+  y: (touches[0].clientY + touches[1].clientY) / 2,
+});
+
 export default function UniverseScene() {
-  const cameraTarget = useStore((state) => state.cameraTarget);
-  const setCameraTarget = useStore((state) => state.setCameraTarget);
+  const currentGalaxy = useStore((state) => state.currentGalaxy);
+  const panCamera = useStore((state) => state.panCamera);
+  const orbitCamera = useStore((state) => state.orbitCamera);
+  const zoomCamera = useStore((state) => state.zoomCamera);
   const resetSelection = useStore((state) => state.resetSelection);
   const setHoveredItem = useStore((state) => state.setHoveredItem);
-  const dragState = useRef({ active: false, x: 0, y: 0 });
+  const gestureRef = useRef({
+    active: false,
+    pointerType: null,
+    x: 0,
+    y: 0,
+    pinchDistance: 0,
+    midpoint: { x: 0, y: 0 },
+  });
 
-  const updateCamera = (deltaX, deltaY) => {
-    const position = new THREE.Vector3(...cameraTarget.position);
-    const lookAt = new THREE.Vector3(...cameraTarget.lookAt);
-    const depth = Math.max(position.distanceTo(lookAt) / 14, 0.2);
-    const panX = deltaX * 0.016 * depth;
-    const panY = deltaY * 0.016 * depth;
+  const isUiTarget = (target) => target.closest?.('[data-ui="true"]');
 
-    setCameraTarget((target) => ({
-      ...target,
-      position: [target.position[0] - panX, target.position[1] + panY, target.position[2]],
-      lookAt: [target.lookAt[0] - panX, target.lookAt[1] + panY, target.lookAt[2]],
-    }));
+  const handleDrag = (deltaX, deltaY, intensity = 1) => {
+    if (currentGalaxy) {
+      orbitCamera({ deltaX: deltaX * intensity, deltaY: deltaY * intensity });
+      return;
+    }
+
+    panCamera({ deltaX: deltaX * intensity, deltaY: deltaY * intensity });
   };
 
   return (
     <div
-      className="relative h-full w-full"
+      className="relative h-full w-full touch-none select-none"
       onPointerDown={(event) => {
-        if (event.target.closest?.('[data-ui="true"]')) {
+        if (event.pointerType === 'touch' || isUiTarget(event.target)) {
           return;
         }
 
-        dragState.current = {
+        gestureRef.current = {
+          ...gestureRef.current,
           active: true,
+          pointerType: event.pointerType,
           x: event.clientX,
           y: event.clientY,
         };
       }}
       onPointerMove={(event) => {
-        if (!dragState.current.active) {
+        if (!gestureRef.current.active || gestureRef.current.pointerType === 'touch') {
           return;
         }
 
-        const deltaX = event.clientX - dragState.current.x;
-        const deltaY = event.clientY - dragState.current.y;
+        const deltaX = event.clientX - gestureRef.current.x;
+        const deltaY = event.clientY - gestureRef.current.y;
 
-        updateCamera(deltaX, deltaY);
-        dragState.current = { active: true, x: event.clientX, y: event.clientY };
+        handleDrag(deltaX, deltaY);
+        gestureRef.current = {
+          ...gestureRef.current,
+          x: event.clientX,
+          y: event.clientY,
+        };
       }}
       onPointerUp={() => {
-        dragState.current.active = false;
+        gestureRef.current.active = false;
       }}
       onPointerLeave={() => {
-        dragState.current.active = false;
+        gestureRef.current.active = false;
       }}
       onWheel={(event) => {
-        if (event.target.closest?.('[data-ui="true"]')) {
+        if (isUiTarget(event.target)) {
           return;
         }
 
-        setCameraTarget((target) => {
-          const position = new THREE.Vector3(...target.position);
-          const lookAt = new THREE.Vector3(...target.lookAt);
-          const direction = position.clone().sub(lookAt).normalize();
-          const distance = position.distanceTo(lookAt);
-          const nextDistance = THREE.MathUtils.clamp(distance + event.deltaY * 0.012, 3.2, 34);
-          const nextPosition = lookAt.clone().add(direction.multiplyScalar(nextDistance));
+        event.preventDefault();
+        zoomCamera(event.deltaY * (currentGalaxy ? 0.012 : 0.02));
+      }}
+      onTouchStart={(event) => {
+        if (isUiTarget(event.target)) {
+          return;
+        }
 
-          return {
-            ...target,
-            position: nextPosition.toArray(),
+        if (event.touches.length === 1) {
+          gestureRef.current = {
+            ...gestureRef.current,
+            active: true,
+            pointerType: 'touch',
+            x: event.touches[0].clientX,
+            y: event.touches[0].clientY,
           };
-        });
+        }
+
+        if (event.touches.length === 2) {
+          gestureRef.current = {
+            ...gestureRef.current,
+            active: true,
+            pointerType: 'pinch',
+            pinchDistance: distanceBetweenTouches(event.touches),
+            midpoint: midpointBetweenTouches(event.touches),
+          };
+        }
+      }}
+      onTouchMove={(event) => {
+        if (isUiTarget(event.target)) {
+          return;
+        }
+
+        event.preventDefault();
+
+        if (event.touches.length === 1 && gestureRef.current.pointerType === 'touch') {
+          const touch = event.touches[0];
+          const deltaX = touch.clientX - gestureRef.current.x;
+          const deltaY = touch.clientY - gestureRef.current.y;
+
+          handleDrag(deltaX, deltaY, 0.9);
+          gestureRef.current = {
+            ...gestureRef.current,
+            x: touch.clientX,
+            y: touch.clientY,
+          };
+        }
+
+        if (event.touches.length === 2) {
+          const pinchDistance = distanceBetweenTouches(event.touches);
+          const midpoint = midpointBetweenTouches(event.touches);
+          const pinchDelta = gestureRef.current.pinchDistance - pinchDistance;
+          const deltaX = midpoint.x - gestureRef.current.midpoint.x;
+          const deltaY = midpoint.y - gestureRef.current.midpoint.y;
+
+          zoomCamera(pinchDelta * 0.02);
+          handleDrag(deltaX, deltaY, 0.45);
+
+          gestureRef.current = {
+            ...gestureRef.current,
+            pointerType: 'pinch',
+            pinchDistance,
+            midpoint,
+          };
+        }
+      }}
+      onTouchEnd={() => {
+        gestureRef.current.active = false;
       }}
     >
       <Canvas
-        camera={{ position: [0, 0, 22], fov: 50 }}
+        camera={{ position: [0, 0, 22], fov: 52 }}
         dpr={[1, 1.75]}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
         onPointerMissed={() => {
           resetSelection();
           setHoveredItem(null);
         }}
       >
-        <fog attach="fog" args={['#040612', 12, 30]} />
+        <fog attach="fog" args={['#040612', 14, 52]} />
         <Universe />
       </Canvas>
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(114,247,255,0.12),transparent_28%),radial-gradient(circle_at_bottom,rgba(255,124,107,0.09),transparent_24%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_42%,rgba(4,6,18,0.28)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(114,247,255,0.14),transparent_28%),radial-gradient(circle_at_bottom,rgba(255,124,107,0.1),transparent_26%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_38%,rgba(4,6,18,0.34)_100%)]" />
       <div className="pointer-events-none absolute bottom-4 left-1/2 z-20 hidden -translate-x-1/2 rounded-full border border-white/10 bg-slate-950/45 px-4 py-2 text-[11px] uppercase tracking-[0.32em] text-white/48 backdrop-blur-md md:block">
-        Drag to pan • Scroll to dive • Click to focus
+        {currentGalaxy ? 'Drag to orbit • Scroll to approach • Click nodes to inspect' : 'Drag to pan • Scroll to dive • Click galaxies to enter'}
       </div>
       <GalaxyScene />
       <HUD />

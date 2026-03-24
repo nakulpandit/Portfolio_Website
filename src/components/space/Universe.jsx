@@ -1,19 +1,12 @@
-import { Line, Sparkles, Text } from '@react-three/drei';
-import { useFrame, useThree } from '@react-three/fiber';
-import { useMemo, useRef, useState } from 'react';
+import { Sparkles } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
+import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { about } from '../../data/about';
-import { contact } from '../../data/contact';
-import { education } from '../../data/education';
 import { galaxies } from '../../data/galaxies';
-import { projects } from '../../data/projects';
-import { paperConnections, researchDomains, researchPapers } from '../../data/research';
-import { skillGroups, skills } from '../../data/skills';
 import { useStore } from '../../store/useStore';
 import starfieldFragment from '../../shaders/starfield.glsl?raw';
 import Galaxy from './Galaxy';
-import Planet from './Planet';
-import Star from './Star';
+import GalaxyInterior from './GalaxyInterior';
 import WarpEffect from './WarpEffect';
 
 const basicVertexShader = `
@@ -25,8 +18,6 @@ const basicVertexShader = `
   }
 `;
 
-const addVectors = (a, b) => a.map((value, index) => value + b[index]);
-
 function StarfieldDome() {
   const meshRef = useRef();
   const materialRef = useRef();
@@ -37,14 +28,14 @@ function StarfieldDome() {
     }
 
     if (meshRef.current) {
-      meshRef.current.rotation.y = state.clock.elapsedTime * 0.008;
-      meshRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.03) * 0.04;
+      meshRef.current.rotation.y = state.clock.elapsedTime * 0.006;
+      meshRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.08) * 0.05;
     }
   });
 
   return (
-    <mesh ref={meshRef} scale={[90, 90, 90]}>
-      <sphereGeometry args={[1, 64, 64]} />
+    <mesh ref={meshRef} scale={[100, 100, 100]}>
+      <sphereGeometry args={[1, 72, 72]} />
       <shaderMaterial
         ref={materialRef}
         vertexShader={basicVertexShader}
@@ -56,35 +47,95 @@ function StarfieldDome() {
   );
 }
 
+function ParallaxStarLayer({ count, spread, color, size, depth, rotation = [0, 0] }) {
+  const groupRef = useRef();
+  const materialRef = useRef();
+  const warpActive = useStore((state) => state.ui.warpActive);
+
+  const positions = useMemo(() => {
+    const values = new Float32Array(count * 3);
+
+    for (let index = 0; index < count; index += 1) {
+      values[index * 3] = (Math.random() - 0.5) * spread[0];
+      values[index * 3 + 1] = (Math.random() - 0.5) * spread[1];
+      values[index * 3 + 2] = (Math.random() - 0.5) * spread[2];
+    }
+
+    return values;
+  }, [count, spread]);
+
+  useFrame((state, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * rotation[0];
+      groupRef.current.rotation.x += delta * rotation[1];
+      groupRef.current.position.x = state.camera.position.x * depth;
+      groupRef.current.position.y = state.camera.position.y * depth;
+      groupRef.current.position.z = state.camera.position.z * depth * 0.18;
+    }
+
+    if (materialRef.current) {
+      materialRef.current.size = THREE.MathUtils.lerp(materialRef.current.size, warpActive ? size * 1.8 : size, 0.08);
+      materialRef.current.opacity = THREE.MathUtils.lerp(materialRef.current.opacity, warpActive ? 0.95 : 0.72, 0.08);
+    }
+  });
+
+  return (
+    <points ref={groupRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        ref={materialRef}
+        color={color}
+        size={size}
+        sizeAttenuation
+        transparent
+        opacity={0.72}
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
 function CameraRig() {
   const cameraTarget = useStore((state) => state.cameraTarget);
   const currentGalaxy = useStore((state) => state.currentGalaxy);
   const selectedItem = useStore((state) => state.selectedItem);
   const warpActive = useStore((state) => state.ui.warpActive);
-  const { camera } = useThree();
-  const lookAtRef = useRef(new THREE.Vector3(...cameraTarget.lookAt));
-  const positionRef = useRef(new THREE.Vector3(...cameraTarget.position));
+  const focusRef = useRef(new THREE.Vector3(...cameraTarget.focus));
+  const distanceRef = useRef(cameraTarget.distance);
+  const yawRef = useRef(cameraTarget.yaw);
+  const pitchRef = useRef(cameraTarget.pitch);
 
   useFrame((state) => {
-    const targetPosition = new THREE.Vector3(...cameraTarget.position);
-    const targetLookAt = new THREE.Vector3(...cameraTarget.lookAt);
-    const pointerDrift = new THREE.Vector3(state.pointer.x * 0.35, state.pointer.y * 0.22, 0);
+    const targetFocus = new THREE.Vector3(...cameraTarget.focus);
+    const driftStrength = selectedItem ? 0.08 : currentGalaxy ? 0.12 : cameraTarget.drift ?? 0.34;
+    const pointerDrift = new THREE.Vector3(state.pointer.x * driftStrength, state.pointer.y * driftStrength * 0.65, 0);
     const idleDrift = new THREE.Vector3(
-      Math.sin(state.clock.elapsedTime * 0.12) * 0.22,
-      Math.cos(state.clock.elapsedTime * 0.16) * 0.16,
-      Math.sin(state.clock.elapsedTime * 0.08) * 0.12,
+      Math.sin(state.clock.elapsedTime * 0.12) * driftStrength * 0.85,
+      Math.cos(state.clock.elapsedTime * 0.15) * driftStrength * 0.6,
+      Math.sin(state.clock.elapsedTime * 0.09) * driftStrength * 0.35,
     );
-    const focusOffset = currentGalaxy ? new THREE.Vector3(-0.18, 0.14, 0) : new THREE.Vector3();
-    const composedTarget = targetPosition.clone().add(pointerDrift).add(idleDrift).add(focusOffset);
-    const lookAtTarget = targetLookAt.clone().add(pointerDrift.clone().multiplyScalar(0.32));
-    const desiredFov = warpActive ? 56 : selectedItem ? 43 : currentGalaxy ? 47 : 50;
 
-    positionRef.current.lerp(composedTarget, warpActive ? 0.11 : 0.06);
-    lookAtRef.current.lerp(lookAtTarget, warpActive ? 0.12 : 0.08);
-    camera.position.copy(positionRef.current);
-    camera.lookAt(lookAtRef.current);
-    camera.fov = THREE.MathUtils.lerp(camera.fov, desiredFov, 0.06);
-    camera.updateProjectionMatrix();
+    focusRef.current.lerp(targetFocus, warpActive ? 0.1 : 0.08);
+    distanceRef.current = THREE.MathUtils.lerp(distanceRef.current, cameraTarget.distance, warpActive ? 0.12 : 0.1);
+    yawRef.current = THREE.MathUtils.lerp(yawRef.current, cameraTarget.yaw, 0.12);
+    pitchRef.current = THREE.MathUtils.lerp(pitchRef.current, cameraTarget.pitch, 0.12);
+
+    const orbit = new THREE.Vector3(
+      Math.sin(yawRef.current) * Math.cos(pitchRef.current),
+      Math.sin(pitchRef.current),
+      Math.cos(yawRef.current) * Math.cos(pitchRef.current),
+    ).multiplyScalar(distanceRef.current);
+
+    const cameraPosition = focusRef.current.clone().add(orbit).add(pointerDrift).add(idleDrift);
+    const lookAt = focusRef.current.clone().add(pointerDrift.multiplyScalar(0.3));
+    const desiredFov = warpActive ? 58 : selectedItem ? 44 : currentGalaxy ? 48 : 52;
+
+    state.camera.position.lerp(cameraPosition, warpActive ? 0.16 : 0.11);
+    state.camera.lookAt(lookAt);
+    state.camera.fov = THREE.MathUtils.lerp(state.camera.fov, desiredFov, 0.1);
+    state.camera.updateProjectionMatrix();
   });
 
   return null;
@@ -93,422 +144,60 @@ function CameraRig() {
 function SelectedBeacon({ item }) {
   const ringRef = useRef();
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (ringRef.current) {
-      ringRef.current.rotation.z = state.clock.elapsedTime * 0.8;
+      ringRef.current.rotation.z += delta * 0.9;
+      ringRef.current.material.opacity = 0.55 + Math.sin(state.clock.elapsedTime * 2.4) * 0.12;
     }
   });
 
   return (
     <group position={item.worldPosition}>
       <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.55, 0.02, 16, 64]} />
-        <meshBasicMaterial color={item.color ?? '#ffffff'} transparent opacity={0.8} />
+        <torusGeometry args={[0.62, 0.03, 16, 72]} />
+        <meshBasicMaterial color={item.color ?? '#ffffff'} transparent opacity={0.65} depthWrite={false} />
       </mesh>
       <mesh>
-        <sphereGeometry args={[0.05, 16, 16]} />
+        <sphereGeometry args={[0.06, 16, 16]} />
         <meshBasicMaterial color="#ffffff" />
       </mesh>
     </group>
   );
 }
 
-function PaperSystem({ item }) {
-  const orbitRef = useRef();
-  const nodes = useMemo(
-    () => [
-      { id: 'summary', label: 'Summary', offset: [1, 0, 0.25], color: '#72f7ff' },
-      { id: 'concepts', label: 'Concepts', offset: [0, 0.9, -0.15], color: '#a4ff86' },
-      { id: 'context', label: 'Context', offset: [-0.95, 0, 0.15], color: '#ffd96a' },
-      { id: 'link', label: 'Link', offset: [0, -0.95, -0.2], color: '#ff7df2' },
-    ],
-    [],
-  );
+function UniverseCluster() {
+  const groupRef = useRef();
+  const currentGalaxy = useStore((state) => state.currentGalaxy);
+  const focusGalaxy = useStore((state) => state.focusGalaxy);
+  const isMobile = useStore((state) => state.isMobile);
 
   useFrame((state) => {
-    if (orbitRef.current) {
-      orbitRef.current.rotation.z = state.clock.elapsedTime * 0.35;
-      orbitRef.current.rotation.y = state.clock.elapsedTime * 0.18;
-    }
-  });
-
-  return (
-    <group position={item.worldPosition}>
-      <mesh>
-        <sphereGeometry args={[0.24, 28, 28]} />
-        <meshBasicMaterial color={item.color} />
-      </mesh>
-      <group ref={orbitRef}>
-        {nodes.map((node) => (
-          <group key={node.id} position={node.offset}>
-            <Line
-              points={[[0, 0, 0], node.offset.map((value) => value * -1)]}
-              color={node.color}
-              transparent
-              opacity={0.55}
-              lineWidth={1}
-            />
-            <mesh>
-              <sphereGeometry args={[0.09, 16, 16]} />
-              <meshBasicMaterial color={node.color} />
-            </mesh>
-            <Text position={[0, 0.18, 0]} fontSize={0.1} color="#f6f7fb" anchorX="center">
-              {node.label}
-            </Text>
-          </group>
-        ))}
-      </group>
-    </group>
-  );
-}
-
-function AboutSystem({ galaxy }) {
-  const inspectItem = useStore((state) => state.inspectItem);
-  const setCurrentGalaxy = useStore((state) => state.setCurrentGalaxy);
-
-  return (
-    <group>
-      <mesh>
-        <sphereGeometry args={[0.3, 24, 24]} />
-        <meshBasicMaterial color={galaxy.color} />
-      </mesh>
-      {about.planets.map((item) => (
-        <Planet
-          key={item.id}
-          label={item.title}
-          color={item.color}
-          orbitRadius={item.orbitRadius}
-          orbitSpeed={item.orbitSpeed}
-          size={item.size}
-          initialAngle={item.initialAngle}
-          onSelect={() => {
-            setCurrentGalaxy(galaxy.id);
-            inspectItem({
-              ...item,
-              kind: 'about',
-              color: item.color,
-              worldPosition: galaxy.position,
-            });
-          }}
-          data={item}
-        />
-      ))}
-    </group>
-  );
-}
-
-function ProjectsSystem({ galaxy, selectedProjectId }) {
-  const inspectItem = useStore((state) => state.inspectItem);
-  const setCurrentGalaxy = useStore((state) => state.setCurrentGalaxy);
-
-  return (
-    <group>
-      {projects.map((project) => {
-        const worldPosition = addVectors(galaxy.position, project.position);
-        return (
-          <Star
-            key={project.id}
-            item={{ ...project, worldPosition }}
-            color={project.color}
-            size={project.featured ? 0.2 : 0.16}
-            label={project.title}
-            active={selectedProjectId === project.id}
-            onSelect={(item) => {
-              setCurrentGalaxy(galaxy.id);
-              inspectItem({
-                ...item,
-                kind: 'project',
-                cameraTarget: {
-                  position: [worldPosition[0] + 0.2, worldPosition[1] + 0.2, worldPosition[2] + 2.7],
-                  lookAt: worldPosition,
-                  zoom: 1,
-                },
-              });
-            }}
-          />
-        );
-      })}
-    </group>
-  );
-}
-
-function SkillsSystem({ galaxy }) {
-  const inspectItem = useStore((state) => state.inspectItem);
-  const setCurrentGalaxy = useStore((state) => state.setCurrentGalaxy);
-
-  return (
-    <group>
-      <mesh>
-        <sphereGeometry args={[0.25, 24, 24]} />
-        <meshBasicMaterial color="#a4ff86" />
-      </mesh>
-      {skills.map((skill) => {
-        const group = skillGroups.find((entry) => entry.id === skill.category);
-        return (
-          <Planet
-            key={skill.id}
-            label={skill.name}
-            color={group?.color ?? galaxy.color}
-            orbitRadius={skill.orbitRadius}
-            orbitSpeed={skill.orbitSpeed}
-            size={skill.size}
-            initialAngle={skill.initialAngle}
-            onSelect={() => {
-              setCurrentGalaxy(galaxy.id);
-              inspectItem({
-                ...skill,
-                title: skill.name,
-                kind: 'skill',
-                color: group?.color ?? galaxy.color,
-                summary: skill.description,
-                levelLabel: `${skill.level}%`,
-                groupLabel: group?.label ?? 'Skill',
-                worldPosition: galaxy.position,
-              });
-            }}
-            data={{
-              ...skill,
-              title: skill.name,
-            }}
-          />
-        );
-      })}
-    </group>
-  );
-}
-
-function EducationSystem({ galaxy, selectedEducationId }) {
-  const inspectItem = useStore((state) => state.inspectItem);
-  const setCurrentGalaxy = useStore((state) => state.setCurrentGalaxy);
-  const points = education.map((item) => item.position);
-
-  return (
-    <group>
-      <Line points={points} color="#7e8dff" lineWidth={3} transparent opacity={0.5} />
-      {education.map((item, index) => {
-        const worldPosition = addVectors(galaxy.position, item.position);
-        return (
-          <Star
-            key={item.id}
-            item={{ ...item, worldPosition }}
-            color={item.color}
-            size={index === 0 ? 0.18 : 0.15}
-            label={item.title}
-            active={selectedEducationId === item.id}
-            onSelect={(selected) => {
-              setCurrentGalaxy(galaxy.id);
-              inspectItem({
-                ...selected,
-                kind: 'education',
-                cameraTarget: {
-                  position: [worldPosition[0] + 0.15, worldPosition[1] + 0.12, worldPosition[2] + 2.8],
-                  lookAt: worldPosition,
-                  zoom: 1,
-                },
-              });
-            }}
-          />
-        );
-      })}
-    </group>
-  );
-}
-
-function ResearchSystem({ galaxy, selectedResearch }) {
-  const inspectItem = useStore((state) => state.inspectItem);
-  const setCurrentGalaxy = useStore((state) => state.setCurrentGalaxy);
-
-  return (
-    <group>
-      {researchDomains.map((domain) => (
-        <group key={domain.id} position={domain.position}>
-          <mesh>
-            <sphereGeometry args={[0.16, 20, 20]} />
-            <meshBasicMaterial color={domain.color} />
-          </mesh>
-          <Text position={[0, 0.28, 0]} fontSize={0.12} color="#f6f7fb" anchorX="center">
-            {domain.title}
-          </Text>
-        </group>
-      ))}
-
-      {paperConnections.map(([fromId, toId]) => {
-        const fromPaper = researchPapers.find((paper) => paper.id === fromId);
-        const toPaper = researchPapers.find((paper) => paper.id === toId);
-        if (!fromPaper || !toPaper) {
-          return null;
-        }
-
-        return (
-          <Line
-            key={`${fromId}-${toId}`}
-            points={[fromPaper.position, toPaper.position]}
-            color="#ffffff"
-            transparent
-            opacity={0.16}
-            lineWidth={1}
-          />
-        );
-      })}
-
-      {researchPapers.map((paper) => {
-        const domain = researchDomains.find((entry) => entry.id === paper.domain);
-        const worldPosition = addVectors(galaxy.position, paper.position);
-        return (
-          <Star
-            key={paper.id}
-            item={{ ...paper, worldPosition, color: domain?.color ?? galaxy.color }}
-            color={domain?.color ?? galaxy.color}
-            size={0.145}
-            label={`${paper.title} (${paper.year})`}
-            active={selectedResearch?.id === paper.id}
-            onSelect={(item) => {
-              setCurrentGalaxy(galaxy.id);
-              inspectItem({
-                ...item,
-                kind: 'research',
-                domainLabel: domain?.title ?? item.domain,
-                cameraTarget: {
-                  position: [worldPosition[0] + 0.15, worldPosition[1], worldPosition[2] + 2.7],
-                  lookAt: worldPosition,
-                  zoom: 1,
-                },
-              });
-            }}
-          />
-        );
-      })}
-
-      {selectedResearch ? <PaperSystem item={selectedResearch} /> : null}
-    </group>
-  );
-}
-
-function ResumeStation({ galaxy }) {
-  const inspectItem = useStore((state) => state.inspectItem);
-  const setCurrentGalaxy = useStore((state) => state.setCurrentGalaxy);
-  const setHoveredItem = useStore((state) => state.setHoveredItem);
-  const [hovered, setHovered] = useState(false);
-  const groupRef = useRef();
-
-  useFrame(() => {
     if (!groupRef.current) {
       return;
     }
 
-    const scale = hovered ? 1.08 : 1;
-    groupRef.current.scale.lerp(new THREE.Vector3(scale, scale, scale), 0.1);
+    const rotationX = currentGalaxy ? state.pointer.y * 0.03 : state.pointer.y * 0.06;
+    const rotationY = currentGalaxy ? state.pointer.x * 0.04 : state.pointer.x * 0.08;
+    groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, -rotationX, 0.03);
+    groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, rotationY, 0.03);
+    groupRef.current.position.y = THREE.MathUtils.lerp(
+      groupRef.current.position.y,
+      Math.sin(state.clock.elapsedTime * 0.12) * (isMobile ? 0.12 : 0.2),
+      0.02,
+    );
   });
 
   return (
-    <group
-      ref={groupRef}
-      onClick={(event) => {
-        event.stopPropagation();
-        setCurrentGalaxy(galaxy.id);
-        inspectItem({
-          id: 'resume-station',
-          title: 'Resume Station',
-          kind: 'resume',
-          color: galaxy.color,
-          summary: 'A recruiter-facing hub for profile context and the latest resume PDF.',
-          link: '/resume/nakul-pandit-resume.pdf',
-          worldPosition: galaxy.position,
-        });
-      }}
-      onPointerEnter={(event) => {
-        event.stopPropagation();
-        setHovered(true);
-        setHoveredItem({ title: 'Resume Station', kind: 'resume' });
-      }}
-      onPointerLeave={() => {
-        setHovered(false);
-        setHoveredItem(null);
-      }}
-    >
-      <mesh>
-        <octahedronGeometry args={[0.35, 0]} />
-        <meshStandardMaterial color="#ffd96a" emissive="#ffd96a" emissiveIntensity={hovered ? 1.7 : 1.25} />
-      </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.62, 0.045, 16, 60]} />
-        <meshBasicMaterial color="#72f7ff" transparent opacity={hovered ? 0.95 : 0.75} />
-      </mesh>
-    </group>
-  );
-}
-
-function ContactSystem({ galaxy }) {
-  const inspectItem = useStore((state) => state.inspectItem);
-  const setCurrentGalaxy = useStore((state) => state.setCurrentGalaxy);
-  const setHoveredItem = useStore((state) => state.setHoveredItem);
-
-  return (
-    <group>
-      <mesh>
-        <sphereGeometry args={[0.18, 18, 18]} />
-        <meshBasicMaterial color={galaxy.color} />
-      </mesh>
-      {contact.channels.map((channel) => (
-        <ContactNode
-          key={channel.id}
-          channel={channel}
+    <group ref={groupRef}>
+      {galaxies.map((galaxy) => (
+        <Galaxy
+          key={galaxy.id}
           galaxy={galaxy}
-          inspectItem={inspectItem}
-          setCurrentGalaxy={setCurrentGalaxy}
-          setHoveredItem={setHoveredItem}
+          active={currentGalaxy === galaxy.id}
+          dimmed={Boolean(currentGalaxy) && currentGalaxy !== galaxy.id}
+          onFocus={focusGalaxy}
         />
       ))}
-    </group>
-  );
-}
-
-function ContactNode({ channel, galaxy, inspectItem, setCurrentGalaxy, setHoveredItem }) {
-  const groupRef = useRef();
-  const [hovered, setHovered] = useState(false);
-
-  useFrame((state) => {
-    if (!groupRef.current) {
-      return;
-    }
-
-    groupRef.current.rotation.y += 0.01;
-    groupRef.current.position.y = channel.position[1] + Math.sin(state.clock.elapsedTime * 1.3 + channel.position[0]) * 0.06;
-    const scale = hovered ? 1.12 : 1;
-    groupRef.current.scale.lerp(new THREE.Vector3(scale, scale, scale), 0.1);
-  });
-
-  return (
-    <group
-      ref={groupRef}
-      position={channel.position}
-      onClick={(event) => {
-        event.stopPropagation();
-        setCurrentGalaxy(galaxy.id);
-        inspectItem({
-          ...channel,
-          kind: 'contact',
-          summary: channel.value,
-          worldPosition: addVectors(galaxy.position, channel.position),
-        });
-      }}
-      onPointerEnter={(event) => {
-        event.stopPropagation();
-        setHovered(true);
-        setHoveredItem({ title: channel.title, kind: 'contact' });
-      }}
-      onPointerLeave={() => {
-        setHovered(false);
-        setHoveredItem(null);
-      }}
-    >
-      <mesh>
-        <boxGeometry args={[0.18, 0.12, 0.12]} />
-        <meshBasicMaterial color={channel.color} />
-      </mesh>
-      <Text position={[0, 0.2, 0]} fontSize={0.09} color="#f6f7fb" anchorX="center">
-        {channel.label}
-      </Text>
     </group>
   );
 }
@@ -516,60 +205,29 @@ function ContactNode({ channel, galaxy, inspectItem, setCurrentGalaxy, setHovere
 export default function Universe() {
   const currentGalaxy = useStore((state) => state.currentGalaxy);
   const selectedItem = useStore((state) => state.selectedItem);
-  const focusGalaxy = useStore((state) => state.focusGalaxy);
   const isMobile = useStore((state) => state.isMobile);
-  const groupRef = useRef();
-
-  useFrame((state) => {
-    if (!groupRef.current || isMobile) {
-      return;
-    }
-
-    const targetX = state.pointer.y * 0.06;
-    const targetY = state.pointer.x * 0.08;
-    groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, -targetX, 0.03);
-    groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetY, 0.03);
-    groupRef.current.position.y = THREE.MathUtils.lerp(
-      groupRef.current.position.y,
-      Math.sin(state.clock.elapsedTime * 0.16) * 0.22,
-      0.02,
-    );
-  });
+  const activeGalaxy = galaxies.find((entry) => entry.id === currentGalaxy) ?? null;
 
   return (
     <>
       <CameraRig />
       <StarfieldDome />
-      <ambientLight intensity={0.7} />
-      <hemisphereLight intensity={0.55} color="#cce7ff" groundColor="#0a0f18" />
-      <pointLight position={[0, 4, 18]} intensity={1.1} color="#72f7ff" />
-      <pointLight position={[12, 10, -10]} intensity={1.25} color="#ff7df2" />
-      <pointLight position={[-14, -8, 12]} intensity={0.95} color="#a4ff86" />
-      <Sparkles count={isMobile ? 80 : 140} scale={[52, 38, 58]} size={2.2} speed={0.12} color="#c1d8ff" />
-      <Sparkles count={isMobile ? 30 : 65} scale={[22, 18, 24]} size={3.3} speed={0.18} color="#fff0d7" />
-      <Sparkles count={isMobile ? 18 : 36} scale={[70, 52, 72]} size={1.3} speed={0.05} color="#8fb7ff" />
+      <ambientLight intensity={0.62} />
+      <hemisphereLight intensity={0.55} color="#dcecff" groundColor="#080d14" />
+      <pointLight position={[0, 5, 18]} intensity={1.3} color="#72f7ff" />
+      <pointLight position={[16, 12, -14]} intensity={1.4} color="#ff7df2" />
+      <pointLight position={[-16, -10, 14]} intensity={1.05} color="#a4ff86" />
+      {activeGalaxy ? <pointLight position={activeGalaxy.position} intensity={1.5} distance={12} color={activeGalaxy.color} /> : null}
 
-      <group ref={groupRef}>
-        {galaxies.map((galaxy) => {
-          const active = currentGalaxy === galaxy.id;
-          const selectedResearch = active && selectedItem?.kind === 'research' ? selectedItem : null;
-          const selectedProjectId = active && selectedItem?.kind === 'project' ? selectedItem.id : null;
-          const selectedEducationId = active && selectedItem?.kind === 'education' ? selectedItem.id : null;
+      <ParallaxStarLayer count={360} spread={[140, 100, 160]} color="#7fbcff" size={0.1} depth={0.02} rotation={[0.003, 0.0015]} />
+      <ParallaxStarLayer count={220} spread={[90, 70, 100]} color="#d8f1ff" size={0.16} depth={0.04} rotation={[0.006, 0.0025]} />
+      <ParallaxStarLayer count={80} spread={[48, 38, 56]} color="#fff1c6" size={0.22} depth={0.07} rotation={[0.012, 0.004]} />
 
-          return (
-            <Galaxy key={galaxy.id} galaxy={galaxy} active={active} onFocus={focusGalaxy}>
-              {galaxy.id === 'about' ? <AboutSystem galaxy={galaxy} /> : null}
-              {galaxy.id === 'projects' ? <ProjectsSystem galaxy={galaxy} selectedProjectId={selectedProjectId} /> : null}
-              {galaxy.id === 'skills' ? <SkillsSystem galaxy={galaxy} /> : null}
-              {galaxy.id === 'education' ? <EducationSystem galaxy={galaxy} selectedEducationId={selectedEducationId} /> : null}
-              {galaxy.id === 'research' ? <ResearchSystem galaxy={galaxy} selectedResearch={selectedResearch} /> : null}
-              {galaxy.id === 'resume' ? <ResumeStation galaxy={galaxy} /> : null}
-              {galaxy.id === 'contact' ? <ContactSystem galaxy={galaxy} /> : null}
-            </Galaxy>
-          );
-        })}
-      </group>
+      <Sparkles count={isMobile ? 90 : 160} scale={[68, 48, 78]} size={2.4} speed={0.12} color="#b9d8ff" />
+      <Sparkles count={isMobile ? 28 : 56} scale={[28, 22, 30]} size={4.2} speed={0.18} color="#fff1dc" />
 
+      <UniverseCluster />
+      <GalaxyInterior galaxy={activeGalaxy} selectedItem={selectedItem} />
       {selectedItem?.worldPosition && selectedItem.kind !== 'about' ? <SelectedBeacon item={selectedItem} /> : null}
       <WarpEffect />
     </>

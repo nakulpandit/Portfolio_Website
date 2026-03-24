@@ -16,9 +16,10 @@ const vertexShader = `
 
 const dummy = new THREE.Object3D();
 
-export default function Galaxy({ galaxy, active, children, onFocus }) {
-  const meshRef = useRef();
+export default function Galaxy({ galaxy, active, dimmed = false, onFocus }) {
+  const coreRef = useRef();
   const haloRef = useRef();
+  const pulseRingRef = useRef();
   const materialRef = useRef();
   const dustRef = useRef();
   const glowRef = useRef();
@@ -27,6 +28,7 @@ export default function Galaxy({ galaxy, active, children, onFocus }) {
 
   const radius = galaxy.radius ?? 1.5;
   const dustCount = galaxy.particleCount ?? 24;
+  const interactive = hovered || active;
 
   const uniforms = useMemo(
     () => ({
@@ -39,14 +41,19 @@ export default function Galaxy({ galaxy, active, children, onFocus }) {
 
   const dustPositions = useMemo(
     () =>
-      Array.from({ length: dustCount }, () => ({
-        position: new THREE.Vector3(
-          (Math.random() - 0.5) * radius * 2.8,
-          (Math.random() - 0.5) * radius * 1.8,
-          (Math.random() - 0.5) * radius * 2.4,
-        ),
-        scale: 0.03 + Math.random() * 0.09,
-      })),
+      Array.from({ length: dustCount }, (_, index) => {
+        const angle = (index / dustCount) * Math.PI * 2;
+        const spread = radius * (1.2 + Math.random() * 0.95);
+
+        return {
+          position: new THREE.Vector3(
+            Math.cos(angle) * spread,
+            (Math.random() - 0.5) * radius * 0.7,
+            Math.sin(angle) * spread * (0.55 + Math.random() * 0.45),
+          ),
+          scale: 0.05 + Math.random() * 0.12,
+        };
+      }),
     [dustCount, radius],
   );
 
@@ -61,40 +68,58 @@ export default function Galaxy({ galaxy, active, children, onFocus }) {
       dummy.updateMatrix();
       dustRef.current.setMatrixAt(index, dummy.matrix);
     });
+
     dustRef.current.instanceMatrix.needsUpdate = true;
   }, [dustPositions]);
 
   useFrame((state, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.z += delta * 0.024;
-      meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.16) * 0.04;
-      meshRef.current.scale.lerp(
-        new THREE.Vector3(
-          radius * (hovered || active ? 1.08 : 1),
-          radius * 0.82 * (hovered || active ? 1.06 : 1),
-          radius * 0.76 * (hovered || active ? 1.04 : 1),
-        ),
-        0.08,
+    if (coreRef.current) {
+      coreRef.current.rotation.z += delta * 0.06;
+      coreRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.12) * 0.06;
+
+      const activeScale = interactive ? 1.1 : 1;
+      coreRef.current.scale.lerp(
+        new THREE.Vector3(radius * activeScale, radius * 0.82 * activeScale, radius * 0.76 * activeScale),
+        0.1,
       );
     }
 
     if (haloRef.current) {
-      haloRef.current.rotation.z -= delta * 0.04;
-      const haloScale = hovered || active ? radius * 1.55 : radius * 1.35;
-      haloRef.current.scale.lerp(new THREE.Vector3(haloScale, haloScale, haloScale), 0.08);
+      haloRef.current.rotation.z -= delta * 0.12;
+      haloRef.current.material.opacity = THREE.MathUtils.lerp(
+        haloRef.current.material.opacity,
+        interactive ? 0.5 : dimmed ? 0.08 : 0.2,
+        0.1,
+      );
+    }
+
+    if (pulseRingRef.current) {
+      pulseRingRef.current.rotation.z += delta * 0.3;
+      const ringScale = interactive ? radius * 2.2 : radius * 1.75;
+      pulseRingRef.current.scale.lerp(new THREE.Vector3(ringScale, ringScale, ringScale), 0.08);
+      pulseRingRef.current.material.opacity = THREE.MathUtils.lerp(
+        pulseRingRef.current.material.opacity,
+        interactive ? 0.38 : 0.08,
+        0.1,
+      );
     }
 
     if (glowRef.current) {
-      glowRef.current.intensity = THREE.MathUtils.lerp(glowRef.current.intensity, hovered || active ? 1.6 : 0.75, 0.08);
+      glowRef.current.intensity = THREE.MathUtils.lerp(
+        glowRef.current.intensity,
+        interactive ? 1.75 : dimmed ? 0.35 : 0.95,
+        0.1,
+      );
     }
 
     if (materialRef.current) {
       materialRef.current.uniforms.uTime.value = state.clock.elapsedTime;
       materialRef.current.uniforms.uHover.value = THREE.MathUtils.lerp(
         materialRef.current.uniforms.uHover.value,
-        hovered || active ? 1 : 0,
+        interactive ? 1 : 0,
         0.12,
       );
+      materialRef.current.opacity = THREE.MathUtils.lerp(materialRef.current.opacity, dimmed && !interactive ? 0.45 : 1, 0.1);
     }
   });
 
@@ -103,39 +128,29 @@ export default function Galaxy({ galaxy, active, children, onFocus }) {
       <pointLight
         ref={glowRef}
         position={[0, 0, 0]}
-        intensity={0.75}
-        distance={8 + radius * 5}
-        decay={2.1}
+        intensity={0.95}
+        distance={10 + radius * 8}
+        decay={2}
         color={galaxy.color}
       />
+
       <instancedMesh ref={dustRef} args={[null, null, dustPositions.length]}>
         <sphereGeometry args={[1, 12, 12]} />
-        <meshBasicMaterial color={galaxy.color} transparent opacity={0.55} />
+        <meshBasicMaterial color={galaxy.color} transparent opacity={dimmed ? 0.16 : 0.42} depthWrite={false} />
       </instancedMesh>
 
-      <mesh ref={haloRef} rotation={[Math.PI / 2, 0, 0]} scale={[radius * 1.35, radius * 1.35, radius * 1.35]}>
-        <torusGeometry args={[1, 0.03, 16, 120]} />
-        <meshBasicMaterial color={galaxy.color} transparent opacity={hovered || active ? 0.45 : 0.18} />
+      <mesh ref={pulseRingRef} rotation={[Math.PI / 2, 0, 0]} scale={[radius * 1.75, radius * 1.75, radius * 1.75]}>
+        <torusGeometry args={[1, 0.03, 12, 96]} />
+        <meshBasicMaterial color={galaxy.color} transparent opacity={0.08} depthWrite={false} />
       </mesh>
 
-      <mesh
-        ref={meshRef}
-        scale={[radius, radius * 0.82, radius * 0.76]}
-        onClick={(event) => {
-          event.stopPropagation();
-          onFocus?.(galaxy);
-        }}
-        onPointerEnter={(event) => {
-          event.stopPropagation();
-          setHovered(true);
-          setHoveredItem({ title: galaxy.label, kind: 'galaxy' });
-        }}
-        onPointerLeave={() => {
-          setHovered(false);
-          setHoveredItem(null);
-        }}
-      >
-        <sphereGeometry args={[1, 48, 48]} />
+      <mesh ref={haloRef} rotation={[Math.PI / 2, 0.24, 0]} scale={[radius * 1.45, radius * 1.45, radius * 1.45]}>
+        <torusGeometry args={[1, 0.045, 16, 120]} />
+        <meshBasicMaterial color={galaxy.color} transparent opacity={0.2} depthWrite={false} />
+      </mesh>
+
+      <mesh ref={coreRef} scale={[radius, radius * 0.82, radius * 0.76]}>
+        <sphereGeometry args={[1, 56, 56]} />
         <shaderMaterial
           ref={materialRef}
           vertexShader={vertexShader}
@@ -147,18 +162,41 @@ export default function Galaxy({ galaxy, active, children, onFocus }) {
         />
       </mesh>
 
-      <mesh scale={[0.22, 0.22, 0.22]}>
+      <mesh scale={[0.28, 0.28, 0.28]}>
         <sphereGeometry args={[1, 18, 18]} />
         <meshBasicMaterial color={galaxy.color} />
       </mesh>
 
-      <Billboard position={[0, radius + 0.7, 0]}>
-        <Text fontSize={hovered || active ? 0.26 : 0.22} color="#f6f7fb" anchorX="center">
-          {galaxy.label.toUpperCase()}
-        </Text>
-      </Billboard>
+      <mesh
+        onClick={(event) => {
+          event.stopPropagation();
+          onFocus?.(galaxy);
+        }}
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          setHovered(true);
+          setHoveredItem({ title: galaxy.label, kind: 'galaxy', summary: galaxy.description });
+        }}
+        onPointerOut={() => {
+          setHovered(false);
+          setHoveredItem(null);
+        }}
+      >
+        <sphereGeometry args={[radius * 1.85, 28, 28]} />
+        <meshBasicMaterial transparent opacity={0.001} depthWrite={false} />
+      </mesh>
 
-      {children}
+      <Billboard position={[0, radius + 0.95, 0]}>
+        <group>
+          <mesh position={[0, 0, -0.02]}>
+            <planeGeometry args={[2.6, 0.5]} />
+            <meshBasicMaterial color="#050915" transparent opacity={interactive ? 0.62 : 0.34} />
+          </mesh>
+          <Text fontSize={interactive ? 0.24 : 0.2} color="#f6f7fb" anchorX="center">
+            {galaxy.label.toUpperCase()}
+          </Text>
+        </group>
+      </Billboard>
     </group>
   );
 }

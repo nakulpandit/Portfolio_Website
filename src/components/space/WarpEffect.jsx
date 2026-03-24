@@ -29,29 +29,25 @@ export default function WarpEffect() {
   );
 
   useFrame((state) => {
-    if (!meshRef.current || !materialRef.current || isMobile) {
+    if (!meshRef.current || !materialRef.current) {
       return;
     }
 
     meshRef.current.position.copy(camera.position);
     meshRef.current.quaternion.copy(camera.quaternion);
-    meshRef.current.translateZ(-2.4);
+    meshRef.current.translateZ(-2.8);
 
     materialRef.current.uniforms.uTime.value = state.clock.elapsedTime;
     materialRef.current.uniforms.uIntensity.value = THREE.MathUtils.lerp(
       materialRef.current.uniforms.uIntensity.value,
-      active ? 1 : 0,
+      active ? (isMobile ? 0.55 : 1) : 0,
       0.08,
     );
   });
 
-  if (isMobile) {
-    return null;
-  }
-
   return (
     <mesh ref={meshRef}>
-      <planeGeometry args={[5.2, 3.4]} />
+      <planeGeometry args={isMobile ? [4.8, 7.8] : [6.8, 4.4]} />
       <shaderMaterial
         ref={materialRef}
         vertexShader={vertexShader}
