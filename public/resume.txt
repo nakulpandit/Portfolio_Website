@@ -1,0 +1,21 @@
+NAKUL PANDIT
+
+Frontend Engineer + Creative Developer
+
+Focus
+- Immersive interfaces
+- Product-minded frontend systems
+- Research-informed interaction design
+
+Core Stack
+- React
+- React Three Fiber
+- Three.js
+- Tailwind CSS
+- Framer Motion
+- Zustand
+
+Highlights
+- Built cinematic, recruiter-friendly portfolio experiences with modular 3D scene systems.
+- Designed frontend architectures that balance performance, clarity, and visual ambition.
+- Created research and product storytelling interfaces for technically sophisticated workflows.
