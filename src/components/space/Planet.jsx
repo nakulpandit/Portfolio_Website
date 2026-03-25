@@ -24,6 +24,8 @@ export default function Planet({
   const currentPosition = useRef(new THREE.Vector3());
   const [hovered, setHovered] = useState(false);
   const setHoveredItem = useStore((state) => state.setHoveredItem);
+  const dragThresholdPx = useStore((state) => state.dragThresholdPx);
+  const isDragging = useStore((state) => state.interactionState.isDragging);
 
   useFrame((state, delta) => {
     const angle = initialAngle + state.clock.elapsedTime * orbitSpeed;
@@ -96,17 +98,22 @@ export default function Planet({
         </mesh>
         <mesh
           onClick={(event) => {
+            if (isDragging || event.delta > dragThresholdPx) {
+              return;
+            }
             event.stopPropagation();
             handleSelect();
           }}
           onPointerOver={(event) => {
             event.stopPropagation();
             setHovered(true);
-            setHoveredItem(data);
+            setHoveredItem({ ...data, title: label });
+            document.body.style.cursor = 'pointer';
           }}
           onPointerOut={() => {
             setHovered(false);
             setHoveredItem(null);
+            document.body.style.cursor = 'none';
           }}
         >
           <sphereGeometry args={[size * 1.95, 22, 22]} />
@@ -114,9 +121,15 @@ export default function Planet({
         </mesh>
         {hovered || active ? (
           <Billboard position={[0, size + 0.3, 0]}>
-            <Text fontSize={0.16} color="#f6f7fb" anchorX="center">
-              {label}
-            </Text>
+            <group>
+              <mesh position={[0, 0.06, -0.02]}>
+                <planeGeometry args={[1.6, 0.32]} />
+                <meshBasicMaterial color="#050915" transparent opacity={0.68} />
+              </mesh>
+              <Text fontSize={0.16} color="#f6f7fb" anchorX="center">
+                {label}
+              </Text>
+            </group>
           </Billboard>
         ) : null}
       </group>

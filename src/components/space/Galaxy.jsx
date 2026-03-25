@@ -23,11 +23,16 @@ export default function Galaxy({ galaxy, active, dimmed = false, onFocus }) {
   const materialRef = useRef();
   const dustRef = useRef();
   const glowRef = useRef();
+  const labelRef = useRef();
   const [hovered, setHovered] = useState(false);
   const setHoveredItem = useStore((state) => state.setHoveredItem);
+  const dragThresholdPx = useStore((state) => state.dragThresholdPx);
+  const isDragging = useStore((state) => state.interactionState.isDragging);
 
   const radius = galaxy.radius ?? 1.5;
   const dustCount = galaxy.particleCount ?? 24;
+  const spinSpeed = galaxy.spinSpeed ?? 0.06;
+  const interactionRadius = galaxy.interactionRadius ?? radius * 2.25;
   const interactive = hovered || active;
 
   const uniforms = useMemo(
@@ -73,8 +78,13 @@ export default function Galaxy({ galaxy, active, dimmed = false, onFocus }) {
   }, [dustPositions]);
 
   useFrame((state, delta) => {
+    if (dustRef.current) {
+      dustRef.current.rotation.y += delta * (spinSpeed * 0.6);
+      dustRef.current.rotation.z += delta * (spinSpeed * 0.35);
+    }
+
     if (coreRef.current) {
-      coreRef.current.rotation.z += delta * 0.06;
+      coreRef.current.rotation.z += delta * spinSpeed;
       coreRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.12) * 0.06;
 
       const activeScale = interactive ? 1.1 : 1;
@@ -85,7 +95,7 @@ export default function Galaxy({ galaxy, active, dimmed = false, onFocus }) {
     }
 
     if (haloRef.current) {
-      haloRef.current.rotation.z -= delta * 0.12;
+      haloRef.current.rotation.z -= delta * (spinSpeed * 1.8);
       haloRef.current.material.opacity = THREE.MathUtils.lerp(
         haloRef.current.material.opacity,
         interactive ? 0.5 : dimmed ? 0.08 : 0.2,
@@ -94,7 +104,7 @@ export default function Galaxy({ galaxy, active, dimmed = false, onFocus }) {
     }
 
     if (pulseRingRef.current) {
-      pulseRingRef.current.rotation.z += delta * 0.3;
+      pulseRingRef.current.rotation.z += delta * (0.28 + spinSpeed * 1.6);
       const ringScale = interactive ? radius * 2.2 : radius * 1.75;
       pulseRingRef.current.scale.lerp(new THREE.Vector3(ringScale, ringScale, ringScale), 0.08);
       pulseRingRef.current.material.opacity = THREE.MathUtils.lerp(
@@ -120,6 +130,16 @@ export default function Galaxy({ galaxy, active, dimmed = false, onFocus }) {
         0.12,
       );
       materialRef.current.opacity = THREE.MathUtils.lerp(materialRef.current.opacity, dimmed && !interactive ? 0.45 : 1, 0.1);
+    }
+
+    if (labelRef.current) {
+      labelRef.current.material.opacity = THREE.MathUtils.lerp(
+        labelRef.current.material.opacity,
+        interactive ? 0.74 : dimmed ? 0.14 : 0.32,
+        0.1,
+      );
+      const scale = interactive ? 1.08 : 1;
+      labelRef.current.scale.lerp(new THREE.Vector3(scale, scale, scale), 0.12);
     }
   });
 
@@ -169,6 +189,10 @@ export default function Galaxy({ galaxy, active, dimmed = false, onFocus }) {
 
       <mesh
         onClick={(event) => {
+          if (isDragging || event.delta > dragThresholdPx) {
+            return;
+          }
+
           event.stopPropagation();
           onFocus?.(galaxy);
         }}
@@ -176,23 +200,25 @@ export default function Galaxy({ galaxy, active, dimmed = false, onFocus }) {
           event.stopPropagation();
           setHovered(true);
           setHoveredItem({ title: galaxy.label, kind: 'galaxy', summary: galaxy.description });
+          document.body.style.cursor = 'pointer';
         }}
         onPointerOut={() => {
           setHovered(false);
           setHoveredItem(null);
+          document.body.style.cursor = 'none';
         }}
       >
-        <sphereGeometry args={[radius * 1.85, 28, 28]} />
+        <sphereGeometry args={[interactionRadius, 32, 32]} />
         <meshBasicMaterial transparent opacity={0.001} depthWrite={false} />
       </mesh>
 
-      <Billboard position={[0, radius + 0.95, 0]}>
+      <Billboard position={[0, radius + 1.0, 0]}>
         <group>
-          <mesh position={[0, 0, -0.02]}>
-            <planeGeometry args={[2.6, 0.5]} />
+          <mesh ref={labelRef} position={[0, 0, -0.02]}>
+            <planeGeometry args={[2.7, 0.52]} />
             <meshBasicMaterial color="#050915" transparent opacity={interactive ? 0.62 : 0.34} />
           </mesh>
-          <Text fontSize={interactive ? 0.24 : 0.2} color="#f6f7fb" anchorX="center">
+          <Text fontSize={interactive ? 0.245 : 0.2} color="#f6f7fb" anchorX="center">
             {galaxy.label.toUpperCase()}
           </Text>
         </group>

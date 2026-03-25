@@ -41,6 +41,8 @@ export default function Star({
   active = false,
 }) {
   const setHoveredItem = useStore((state) => state.setHoveredItem);
+  const dragThresholdPx = useStore((state) => state.dragThresholdPx);
+  const isDragging = useStore((state) => state.interactionState.isDragging);
   const meshRef = useRef();
   const haloRef = useRef();
   const lightRef = useRef();
@@ -91,12 +93,14 @@ export default function Star({
   const handlePointerEnter = () => {
     setHovered(true);
     setHoveredItem(item);
+    document.body.style.cursor = 'pointer';
     onHover?.(item);
   };
 
   const handlePointerLeave = () => {
     setHovered(false);
     setHoveredItem(null);
+    document.body.style.cursor = 'none';
     onHover?.(null);
   };
 
@@ -113,6 +117,9 @@ export default function Star({
       </mesh>
       <mesh
         onClick={(event) => {
+          if (isDragging || event.delta > dragThresholdPx) {
+            return;
+          }
           event.stopPropagation();
           onSelect?.(item);
         }}
@@ -127,9 +134,15 @@ export default function Star({
       </mesh>
       {hovered || active ? (
         <Billboard position={[0, size * 2.5, 0]}>
-          <Text fontSize={0.18} maxWidth={2.8} anchorX="center" anchorY="bottom" color="#f6f7fb">
-            {label}
-          </Text>
+          <group>
+            <mesh position={[0, 0.08, -0.02]}>
+              <planeGeometry args={[2.2, 0.38]} />
+              <meshBasicMaterial color="#050915" transparent opacity={0.68} />
+            </mesh>
+            <Text fontSize={0.18} maxWidth={2.8} anchorX="center" anchorY="bottom" color="#f6f7fb">
+              {label}
+            </Text>
+          </group>
         </Billboard>
       ) : null}
     </group>

@@ -1,32 +1,73 @@
 import { create } from 'zustand';
 import { galaxies } from '../data/galaxies';
 
+const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
 const clampPitch = (pitch) => Math.max(-0.95, Math.min(0.95, pitch));
+const clampDistance = (distance, minDistance, maxDistance) => clampValue(distance, minDistance, maxDistance);
+const UNIVERSE_FOCUS_BOUNDS = { x: 60, y: 36, z: 80 };
 
-const createCameraTarget = (overrides = {}) => ({
-  focus: [0, 0, 0],
-  distance: 22,
-  yaw: -0.12,
-  pitch: 0.1,
-  minDistance: 9,
-  maxDistance: 34,
-  drift: 0.36,
-  framing: 'universe',
-  ...overrides,
-});
+const clampFocus = (focus = [0, 0, 0], framing = 'universe') => {
+  if (!Array.isArray(focus) || focus.length !== 3) {
+    return [0, 0, 0];
+  }
+
+  if (framing !== 'universe') {
+    return focus;
+  }
+
+  return [
+    clampValue(focus[0], -UNIVERSE_FOCUS_BOUNDS.x, UNIVERSE_FOCUS_BOUNDS.x),
+    clampValue(focus[1], -UNIVERSE_FOCUS_BOUNDS.y, UNIVERSE_FOCUS_BOUNDS.y),
+    clampValue(focus[2], -UNIVERSE_FOCUS_BOUNDS.z, UNIVERSE_FOCUS_BOUNDS.z),
+  ];
+};
+
+const createCameraTarget = (overrides = {}) => {
+  const framing = overrides.framing ?? 'universe';
+  const minDistance = overrides.minDistance ?? 7;
+  const maxDistance = overrides.maxDistance ?? 48;
+
+  return {
+    focus: clampFocus(overrides.focus ?? [0, 0, 0], framing),
+    distance: clampDistance(overrides.distance ?? 22, minDistance, maxDistance),
+    yaw: overrides.yaw ?? -0.12,
+    pitch: clampPitch(overrides.pitch ?? 0.1),
+    minDistance,
+    maxDistance,
+    drift: overrides.drift ?? 0.36,
+    framing,
+    ...overrides,
+    focus: clampFocus(overrides.focus ?? [0, 0, 0], framing),
+    distance: clampDistance(overrides.distance ?? 22, minDistance, maxDistance),
+    pitch: clampPitch(overrides.pitch ?? 0.1),
+    minDistance,
+    maxDistance,
+    framing,
+  };
+};
 
 const INITIAL_CAMERA = createCameraTarget();
+const createTransitionState = (overrides = {}) => ({
+  active: false,
+  from: 'universe',
+  to: 'universe',
+  intent: 'idle',
+  progress: 1,
+  startedAt: 0,
+  duration: 1100,
+  ...overrides,
+});
 
 const getGalaxyById = (id) => galaxies.find((entry) => entry.id === id) ?? null;
 
 const getGalaxyCamera = (galaxy, overrides = {}) =>
   createCameraTarget({
     focus: galaxy.position,
-    distance: galaxy.focusDistance ?? 5.2,
-    yaw: galaxy.cameraYaw ?? 0.32,
-    pitch: galaxy.cameraPitch ?? 0.16,
-    minDistance: galaxy.minDistance ?? 2.8,
-    maxDistance: galaxy.maxDistance ?? 10.5,
+    distance: galaxy.cameraPreset?.distance ?? galaxy.focusDistance ?? 5.2,
+    yaw: galaxy.cameraPreset?.yaw ?? galaxy.cameraYaw ?? 0.32,
+    pitch: galaxy.cameraPreset?.pitch ?? galaxy.cameraPitch ?? 0.16,
+    minDistance: galaxy.cameraPreset?.minDistance ?? galaxy.minDistance ?? 2.8,
+    maxDistance: galaxy.cameraPreset?.maxDistance ?? galaxy.maxDistance ?? 10.5,
     drift: 0.18,
     framing: 'galaxy',
     ...overrides,
@@ -35,10 +76,17 @@ const getGalaxyCamera = (galaxy, overrides = {}) =>
 export const useStore = create((set) => ({
   phase: 'landing',
   isMobile: false,
+  dragThresholdPx: 7,
+  hudCollapsed: true,
   currentGalaxy: null,
   selectedItem: null,
   hoveredItem: null,
   cameraTarget: INITIAL_CAMERA,
+  lastUniverseView: INITIAL_CAMERA,
+  interactionState: {
+    isDragging: false,
+  },
+  transitionState: createTransitionState(),
   ui: {
     infoPanelOpen: false,
     modalOpen: false,
@@ -47,47 +95,59 @@ export const useStore = create((set) => ({
   },
   setPhase: (phase) => set({ phase }),
   setIsMobile: (isMobile) => set({ isMobile }),
+  setHudCollapsed: (hudCollapsed) => set({ hudCollapsed }),
+  setDragging: (isDragging) =>
+    set((state) => ({ interactionState: { ...state.interactionState, isDragging } })),
   setCurrentGalaxy: (currentGalaxy) => set({ currentGalaxy }),
   setSelectedItem: (selectedItem) => set({ selectedItem }),
   setHoveredItem: (hoveredItem) => set({ hoveredItem }),
   setCameraTarget: (cameraTarget) =>
     set((state) => ({
-      cameraTarget:
-        typeof cameraTarget === 'function' ? cameraTarget(state.cameraTarget) : createCameraTarget(cameraTarget),
+      cameraTarget: createCameraTarget(
+        typeof cameraTarget === 'function'
+          ? {
+              ...state.cameraTarget,
+              ...cameraTarget(state.cameraTarget),
+            }
+          : {
+              ...state.cameraTarget,
+              ...cameraTarget,
+            },
+      ),
     })),
-  panCamera: ({ deltaX = 0, deltaY = 0, scale = 0.016 } = {}) =>
+  syncCameraFromControls: ({ focus, distance, yaw, pitch, framing }) =>
     set((state) => {
-      const depth = Math.max(state.cameraTarget.distance * 0.12, 0.25);
-      const panX = deltaX * scale * depth;
-      const panY = deltaY * scale * depth;
+      const nextFraming = framing ?? state.cameraTarget.framing;
+      const minDistance = state.cameraTarget.minDistance;
+      const maxDistance = state.cameraTarget.maxDistance;
 
       return {
-        cameraTarget: {
+        cameraTarget: createCameraTarget({
           ...state.cameraTarget,
-          focus: [
-            state.cameraTarget.focus[0] - panX,
-            state.cameraTarget.focus[1] + panY,
-            state.cameraTarget.focus[2],
-          ],
-        },
+          focus: focus ? clampFocus(focus, nextFraming) : state.cameraTarget.focus,
+          distance:
+            typeof distance === 'number'
+              ? clampDistance(distance, minDistance, maxDistance)
+              : state.cameraTarget.distance,
+          yaw: typeof yaw === 'number' ? yaw : state.cameraTarget.yaw,
+          pitch: typeof pitch === 'number' ? clampPitch(pitch) : state.cameraTarget.pitch,
+          framing: nextFraming,
+        }),
       };
     }),
-  orbitCamera: ({ deltaX = 0, deltaY = 0, yawScale = 0.004, pitchScale = 0.0032 } = {}) =>
+  setTransitionProgress: (progress) =>
     set((state) => ({
-      cameraTarget: {
-        ...state.cameraTarget,
-        yaw: state.cameraTarget.yaw - deltaX * yawScale,
-        pitch: clampPitch(state.cameraTarget.pitch - deltaY * pitchScale),
+      transitionState: {
+        ...state.transitionState,
+        progress: clampValue(progress, 0, 1),
       },
     })),
-  zoomCamera: (delta) =>
+  completeTransition: () =>
     set((state) => ({
-      cameraTarget: {
-        ...state.cameraTarget,
-        distance: Math.min(
-          state.cameraTarget.maxDistance,
-          Math.max(state.cameraTarget.minDistance, state.cameraTarget.distance + delta),
-        ),
+      transitionState: {
+        ...state.transitionState,
+        active: false,
+        progress: 1,
       },
     })),
   setInfoPanelOpen: (isOpen) =>
@@ -104,6 +164,16 @@ export const useStore = create((set) => ({
       selectedItem: null,
       hoveredItem: null,
       cameraTarget: getGalaxyCamera(galaxy),
+      lastUniverseView: state.currentGalaxy ? state.lastUniverseView : createCameraTarget({ ...state.cameraTarget }),
+      transitionState: createTransitionState({
+        active: true,
+        from: state.currentGalaxy ?? 'universe',
+        to: galaxy.id,
+        intent: 'enter-galaxy',
+        progress: 0,
+        startedAt: Date.now(),
+        duration: 1350,
+      }),
       ui: {
         ...state.ui,
         infoPanelOpen: true,
@@ -127,6 +197,15 @@ export const useStore = create((set) => ({
               drift: 0.12,
             })
           : fallbackCamera,
+        transitionState: createTransitionState({
+          active: Boolean(payload.cameraTarget),
+          from: state.currentGalaxy ?? 'galaxy',
+          to: payload.id ?? payload.title ?? 'node',
+          intent: 'inspect-node',
+          progress: 0,
+          startedAt: Date.now(),
+          duration: 900,
+        }),
         ui: {
           ...state.ui,
           infoPanelOpen: payload.kind !== 'about',
@@ -141,7 +220,16 @@ export const useStore = create((set) => ({
 
       return {
         selectedItem: null,
-        cameraTarget: galaxy ? getGalaxyCamera(galaxy) : INITIAL_CAMERA,
+        cameraTarget: galaxy ? getGalaxyCamera(galaxy) : createCameraTarget({ ...state.lastUniverseView, framing: 'universe' }),
+        transitionState: createTransitionState({
+          active: true,
+          from: 'detail',
+          to: galaxy ? galaxy.id : 'universe',
+          intent: 'return-orbit',
+          progress: 0,
+          startedAt: Date.now(),
+          duration: 980,
+        }),
         ui: {
           ...state.ui,
           infoPanelOpen: Boolean(galaxy),
@@ -154,7 +242,16 @@ export const useStore = create((set) => ({
       currentGalaxy: null,
       selectedItem: null,
       hoveredItem: null,
-      cameraTarget: INITIAL_CAMERA,
+      cameraTarget: createCameraTarget({ ...state.lastUniverseView, framing: 'universe' }),
+      transitionState: createTransitionState({
+        active: true,
+        from: state.currentGalaxy ?? 'galaxy',
+        to: 'universe',
+        intent: 'exit-galaxy',
+        progress: 0,
+        startedAt: Date.now(),
+        duration: 1400,
+      }),
       ui: {
         ...state.ui,
         infoPanelOpen: false,

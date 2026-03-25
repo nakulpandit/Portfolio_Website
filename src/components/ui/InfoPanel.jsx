@@ -15,6 +15,7 @@ function Pill({ children }) {
 }
 
 function ActionLink({ href, children, tone = 'primary', download = false }) {
+  const isMailto = href?.startsWith('mailto:');
   const styles =
     tone === 'secondary'
       ? 'bg-white text-slate-950'
@@ -25,8 +26,8 @@ function ActionLink({ href, children, tone = 'primary', download = false }) {
   return (
     <a
       href={href}
-      target={download ? undefined : '_blank'}
-      rel={download ? undefined : 'noreferrer'}
+      target={download || isMailto ? undefined : '_blank'}
+      rel={download || isMailto ? undefined : 'noreferrer'}
       download={download}
       className={`inline-flex rounded-full px-4 py-2 font-medium transition hover:translate-y-[-1px] ${styles}`}
     >
@@ -192,6 +193,7 @@ export default function InfoPanel() {
             <div className="space-y-4 text-sm text-white/72">
               <p>{selectedItem.value}</p>
               <p>{contact.availability}</p>
+              {selectedItem.action?.type === 'mailto' ? <Pill>Email route</Pill> : null}
               <ActionLink href={selectedItem.href} tone="warm">
                 Open {selectedItem.label}
               </ActionLink>
@@ -233,6 +235,11 @@ export default function InfoPanel() {
                 <ActionLink href={about.links.linkedin} tone="secondary">
                   Open LinkedIn
                 </ActionLink>
+                {contact.channels.find((entry) => entry.id === 'email') ? (
+                  <ActionLink href={contact.channels.find((entry) => entry.id === 'email').href} tone="warm">
+                    Send Email
+                  </ActionLink>
+                ) : null}
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                 <p className="text-xs uppercase tracking-[0.3em] text-white/45">Signal Console</p>

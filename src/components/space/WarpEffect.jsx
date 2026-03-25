@@ -15,6 +15,7 @@ const vertexShader = `
 
 export default function WarpEffect() {
   const active = useStore((state) => state.ui.warpActive);
+  const transitionState = useStore((state) => state.transitionState);
   const isMobile = useStore((state) => state.isMobile);
   const meshRef = useRef();
   const materialRef = useRef();
@@ -37,10 +38,13 @@ export default function WarpEffect() {
     meshRef.current.quaternion.copy(camera.quaternion);
     meshRef.current.translateZ(-2.8);
 
+    const transitionPulse = transitionState.active ? Math.sin(Math.PI * transitionState.progress) : 0;
+    const targetIntensity = active ? (isMobile ? 0.55 : 1) : transitionPulse * (isMobile ? 0.26 : 0.48);
+
     materialRef.current.uniforms.uTime.value = state.clock.elapsedTime;
     materialRef.current.uniforms.uIntensity.value = THREE.MathUtils.lerp(
       materialRef.current.uniforms.uIntensity.value,
-      active ? (isMobile ? 0.55 : 1) : 0,
+      targetIntensity,
       0.08,
     );
   });
